@@ -7,6 +7,7 @@ __all__ = [
     "make_csv_handler",
     "make_log_handler",
     "make_dcd_handler",
+    "make_force_dcd_handler",
     "Loggable",
 ]
 
@@ -527,11 +528,10 @@ class ForceDCDHandler(logging.Handler):
             self.stream.seek(20, os.SEEK_SET)
             self.stream.write(struct.pack("<i", frame))
             self.stream.seek(0, os.SEEK_END)
-            self.stream.write(struct.pack("<i6di", 48, a, G, b, B, A, c, 48))
             size = struct.pack("<i", 4*system_size)
             for i in range(3):
                 self.stream.write(size)
-                coordinate = array.array("f", (r[i] for r in positions))
+                coordinate = array.array("f", (r[i] for r in forces))
                 coordinate.tofile(self.stream)
                 self.stream.write(size)
             self.stream.flush()
@@ -552,84 +552,9 @@ class ForceDCDHandler(logging.Handler):
             self.release()
 
 
-def make_file_handler(
+def make_force_dcd_handler(
         output_directory: str,
-        suffix: str,
-        formatter: logging.Formatter,
-        filter_: logging.Filter,
-) -> logging.Handler:
-    """Create a handler for logging to files.
-
-    Args:
-        output_directory: A directory where records are written.
-        suffix: A file extension.
-        formatter: A formatter to apply to records.
-        filter_: A filter to apply to records.
-
-    Returns:
-        The file handler applying the specified filters and formatters.
-    """
-    outfile = pathlib.Path(output_directory) / ("pydft_qmmm" + suffix)
-    handler = logging.FileHandler(outfile)
-    handler.addFilter(filter_)
-    handler.setFormatter(formatter)
-    return handler
-
-
-def make_csv_handler(
-        output_directory: str,
-        decimal_places: int = 3,
-        interval: int = 1,
-) -> logging.Handler:
-    """Create a handler for logging to CSV files.
-
-    Args:
-        output_directory: A directory where records are written.
-        decimal_places: The number of decimal places to include when
-            logging to a CSV file.
-        interval: The interval at which to write logs in terms of
-            simulation steps.
-
-    Returns:
-        A CSV file handler.
-    """
-    handler = make_file_handler(
-        output_directory,
-        ".csv",
-        PyDFTQMMMCSVFormatter(f"%(message).{decimal_places}f"),
-        PyDFTQMMMEnergyFilter(interval),
-    )
-    return handler
-
-
-def make_log_handler(
-        output_directory: str,
-        decimal_places: int = 3,
-        interval: int = 1,
-) -> logging.Handler:
-    """Create a handler for logging to log files.
-
-    Args:
-        output_directory: A directory where records are written.
-        decimal_places: The number of decimal places to include when
-            logging to a log file.
-        interval: The interval at which to write logs in terms of
-            simulation steps.
-
-    Returns:
-        A log file handler.
-    """
-    handler = make_file_handler(
-        output_directory,
-        ".log",
-        PyDFTQMMMLogFormatter(f"%(message).{decimal_places}f"),
-        PyDFTQMMMEnergyFilter(interval),
-    )
-    return handler
-
-
-def make_dcd_handler(
-        output_directory: str,
+        key: str,         #qm or mm
         interval: int = 1,
         timestep: int | float = 1,
 ) -> logging.Handler:
@@ -644,9 +569,9 @@ def make_dcd_handler(
     Returns:
         A DCD file handler.
     """
-    outfile = pathlib.Path(output_directory) / "pydft_qmmm.dcd"
-    handler = DCDHandler(outfile, interval, timestep)
-    handler.addFilter(PyDFTQMMMForcesFilter(interval))
+    outfile = pathlib.Path(output_directory) / f"forces_{key}.dcd"
+    handler = ForceDCDHandler(outfile, interval, timestep)
+    handler.addFilter(PyDFTQMMMForceFilter(interval))
     return handler
 
 

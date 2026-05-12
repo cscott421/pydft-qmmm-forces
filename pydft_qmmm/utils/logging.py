@@ -57,6 +57,13 @@ class PositionRecord(FrameRecord):
     positions: NDArray[np.float64]
     box: NDArray[np.float64]
 
+class ForceRecord(FrameRecord):
+    """A log record with force data.
+
+    Attributes:
+        forces: The current forces of a simulation.
+    """
+    forces: NDArray[np.float64]
 
 def _flatten_dict(
         dictionary: dict[str, Any],
@@ -147,6 +154,28 @@ class PyDFTQMMMPositionFilter(PyDFTQMMMIntervalFilter):
         if not hasattr(record, "box"):
             return False
         if check_array(record.positions):
+            raise TypeError
+        return True
+
+class PyDFTQMMMForceFilter(PyDFTQMMMIntervalFilter):
+    """ Logging filter that grabs logs with force data.
+    """
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Determine whether or not to log the record.
+
+        Args:
+            record: The record to log if the simulation frame is
+                divisible by the write interval and if the log
+                contains the simulation position data.
+
+        Returns:
+            Whether or not to log the record.
+        """
+        if not super().filter(record):
+            return False
+        if not hasattr(record, "forces"):
+            return False
+        if check_array(record.forces):
             raise TypeError
         return True
 
@@ -429,6 +458,195 @@ def make_dcd_handler(
     outfile = pathlib.Path(output_directory) / "pydft_qmmm.dcd"
     handler = DCDHandler(outfile, interval, timestep)
     handler.addFilter(PyDFTQMMMPositionFilter(interval))
+    return handler
+
+
+class ForceDCDHandler(logging.Handler):
+    r"""Handler for writing Force data to a DCD file.
+
+    Args:
+        filename: The path of the DCD file.
+        interval: The interval between subsequent writes in terms
+            of simulation steps.
+        timestep: The timestep (:math:`\mathrm{fs}`) of the simulation.
+        mode: The mode in which to access the DCD file.
+    """
+
+    def __init__(
+            self,
+            filename: str | bytes | os.PathLike,
+            interval: int,
+            timestep: int | float,
+            mode: str = "w+b",
+    ) -> None:
+        self.interval = interval
+        self.timestep = timestep
+        super().__init__()
+        self.stream = open(filename, mode)
+
+    def _build_header(self, system_size: int) -> bytes:
+        """Generate the header to the DCD file.
+
+        Args:
+            system_size: The number of particles in the system.
+
+        Returns:
+            The header of the DCD file in binary format.
+        """
+        header = struct.pack(
+            "<i4c9if", 84, b"C", b"O", b"R", b"D",
+            0, 0, self.interval, 0, 0, 0, 0, 0, 0, self.timestep,
+        )
+        header += struct.pack(
+            "<13i", 1, 0, 0, 0, 0, 0, 0, 0, 0, 24,
+            84, 164, 2,
+        )
+        header += struct.pack("<80s", b"Created by PyDFT-QMMM")
+        header += struct.pack("<80s", b"Created now")
+        header += struct.pack("<4i", 164, 4, system_size, 4)
+        return header
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Write a record to a DCD file.
+
+        Args:
+            record: The record to write to a DCD file.
+        """
+        record = cast(ForceRecord, record)
+        try:
+            self.acquire()
+            if self.stream.closed:
+                self.stream = open(self.stream.name, self.stream.mode)
+            forces, frame = record.forces, record.frame
+            system_size = len(forces)
+            if frame == 0:
+                header = self._build_header(system_size)
+                self.stream.write(header)
+            self.stream.seek(8, os.SEEK_SET)
+            self.stream.write(struct.pack("<i", frame//self.interval))
+            self.stream.seek(20, os.SEEK_SET)
+            self.stream.write(struct.pack("<i", frame))
+            self.stream.seek(0, os.SEEK_END)
+            self.stream.write(struct.pack("<i6di", 48, a, G, b, B, A, c, 48))
+            size = struct.pack("<i", 4*system_size)
+            for i in range(3):
+                self.stream.write(size)
+                coordinate = array.array("f", (r[i] for r in positions))
+                coordinate.tofile(self.stream)
+                self.stream.write(size)
+            self.stream.flush()
+        except Exception:
+            self.handleError(record)
+        finally:
+            self.release()
+
+    def close(self) -> None:
+        """Close the DCD file stream."""
+        try:
+            self.acquire()
+            try:
+                self.stream.close()
+            finally:
+                super().close()
+        finally:
+            self.release()
+
+
+def make_file_handler(
+        output_directory: str,
+        suffix: str,
+        formatter: logging.Formatter,
+        filter_: logging.Filter,
+) -> logging.Handler:
+    """Create a handler for logging to files.
+
+    Args:
+        output_directory: A directory where records are written.
+        suffix: A file extension.
+        formatter: A formatter to apply to records.
+        filter_: A filter to apply to records.
+
+    Returns:
+        The file handler applying the specified filters and formatters.
+    """
+    outfile = pathlib.Path(output_directory) / ("pydft_qmmm" + suffix)
+    handler = logging.FileHandler(outfile)
+    handler.addFilter(filter_)
+    handler.setFormatter(formatter)
+    return handler
+
+
+def make_csv_handler(
+        output_directory: str,
+        decimal_places: int = 3,
+        interval: int = 1,
+) -> logging.Handler:
+    """Create a handler for logging to CSV files.
+
+    Args:
+        output_directory: A directory where records are written.
+        decimal_places: The number of decimal places to include when
+            logging to a CSV file.
+        interval: The interval at which to write logs in terms of
+            simulation steps.
+
+    Returns:
+        A CSV file handler.
+    """
+    handler = make_file_handler(
+        output_directory,
+        ".csv",
+        PyDFTQMMMCSVFormatter(f"%(message).{decimal_places}f"),
+        PyDFTQMMMEnergyFilter(interval),
+    )
+    return handler
+
+
+def make_log_handler(
+        output_directory: str,
+        decimal_places: int = 3,
+        interval: int = 1,
+) -> logging.Handler:
+    """Create a handler for logging to log files.
+
+    Args:
+        output_directory: A directory where records are written.
+        decimal_places: The number of decimal places to include when
+            logging to a log file.
+        interval: The interval at which to write logs in terms of
+            simulation steps.
+
+    Returns:
+        A log file handler.
+    """
+    handler = make_file_handler(
+        output_directory,
+        ".log",
+        PyDFTQMMMLogFormatter(f"%(message).{decimal_places}f"),
+        PyDFTQMMMEnergyFilter(interval),
+    )
+    return handler
+
+
+def make_dcd_handler(
+        output_directory: str,
+        interval: int = 1,
+        timestep: int | float = 1,
+) -> logging.Handler:
+    r"""Create a handler for logging to DCD files.
+
+    Args:
+        output_directory: A directory where records are written.
+        interval: The interval at which to write logs in terms of
+            simulation steps.
+        timestep: The timestep (:math:`\mathrm{fs}`) of the simulation.
+
+    Returns:
+        A DCD file handler.
+    """
+    outfile = pathlib.Path(output_directory) / "pydft_qmmm.dcd"
+    handler = DCDHandler(outfile, interval, timestep)
+    handler.addFilter(PyDFTQMMMForcesFilter(interval))
     return handler
 
 

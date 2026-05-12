@@ -609,6 +609,8 @@ class Loggable:
             dcd_write: bool = True,
             dcd_write_interval: int = 50,
             dcd_timestep: int | float = 1,
+            force_dcd_write: bool = True,
+            force_dcd_write_interval: int = 1,
     ) -> None:
         if not pathlib.Path(output_directory).exists():
             os.makedirs(pathlib.Path(output_directory))
@@ -634,4 +636,13 @@ class Loggable:
                 dcd_timestep,
             )
             handlers.append(dcd_handler)
+        if force_dcd_write:
+            for key in ["qm", "mm"]:
+                force_dcd_handler= make_force_dcd_handler(
+                    output_directory,
+                    key,
+                    force_dcd_write_interval,
+                    dcd_timestep,
+                )
+                handlers.append(force_dcd_handler)
         self.handlers = handlers

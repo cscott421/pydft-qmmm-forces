@@ -24,6 +24,7 @@ from pydft_qmmm.utils import pluggable_method
 
 if TYPE_CHECKING:
     from .calculator import Components
+    from .calculator import ForceComponents
     from pydft_qmmm import System  # noqa: F401
 
 
@@ -61,6 +62,7 @@ class CompositeCalculator(Calculator):
         energy = 0.
         forces = np.zeros(self.system.forces.shape)
         components: Components = dict()
+        force_components: ForceComponents = dict()
         for i, calculator in enumerate(self.calculators):
             # Calculate the energy, forces, and components.
             results = calculator.calculate(
@@ -70,6 +72,8 @@ class CompositeCalculator(Calculator):
             energy += results.energy
             if return_forces:
                 forces += results.forces
+                force_components[name] = results.forces        # NEW each sub-calculator's force array
+                force_components["."*(i + 1)] = results.force_components  # NEW nested breakdown from below
             # Determine a unique name for the calculator.
             name = calculator.name
             suffix = "0"
@@ -79,7 +83,7 @@ class CompositeCalculator(Calculator):
             # Assign the components appropriately.
             components[name] = results.energy
             components["."*(i + 1)] = results.components
-        results = Results(energy, forces, components)
+        results = Results(energy, forces, components, force_components)
         return results
 
     @property

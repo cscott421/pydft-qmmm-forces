@@ -116,6 +116,6 @@ Alternatively, you can clone the repository and install using ``pip``:
 
 ```bash
 git clone https://github.com/cscott421/pydft-qmmm-forces
-cd pydft-qmmm-forces
+cd pydft-qmmm
 pip install .
 ```

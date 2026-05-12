@@ -109,13 +109,13 @@ Installation
 PyDFT-QMMM can be installed directly from github using ``pip``:
 
 ```bash
-python -m pip install git+https://github.com/johnppederson/pydft-qmmm
+python -m pip install git+https://github.com/cscott421/pydft-qmmm-forces
 ```
 
 Alternatively, you can clone the repository and install using ``pip``:
 
 ```bash
-git clone https://github.com/johnppederson/pydft-qmmm
-cd pydft-qmmm
+git clone https://github.com/cscott421/pydft-qmmm-forces
+cd pydft-qmmm-forces
 pip install .
 ```

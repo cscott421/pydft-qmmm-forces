@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 
 Components: TypeAlias = dict[str, Any]
 
+#NEW line for forces
+ForceComponents: TypeAlias = dict[str, NDArray[np.float64]]
 
 @dataclass
 class Results:
@@ -43,12 +45,16 @@ class Results:
         components: The energy components
             (:math:`\mathrm{kJ\;mol^{-1}}`) of a system determined by a
             calculator.
+        force componets: Added breakdown of MM and QM forces
     """
     energy: float = 0
     forces: NDArray[np.float64] = field(
         default_factory=lambda: np.empty(0),
     )
     components: Components = field(
+        default_factory=dict,
+    )
+    force_components: ForceComponents = field(
         default_factory=dict,
     )
 

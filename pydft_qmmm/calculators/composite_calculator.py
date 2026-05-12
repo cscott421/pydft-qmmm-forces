@@ -70,10 +70,6 @@ class CompositeCalculator(Calculator):
                 return_components,
             )
             energy += results.energy
-            if return_forces:
-                forces += results.forces
-                force_components[name] = results.forces        # NEW each sub-calculator's force array
-                force_components["."*(i + 1)] = results.force_components  # NEW nested breakdown from below
             # Determine a unique name for the calculator.
             name = calculator.name
             suffix = "0"
@@ -83,6 +79,10 @@ class CompositeCalculator(Calculator):
             # Assign the components appropriately.
             components[name] = results.energy
             components["."*(i + 1)] = results.components
+            if return_forces:
+                forces += results.forces
+                force_components[name] = results.forces        # NEW each sub-calculator's force array
+                force_components["."*(i + 1)] = results.force_components  # NEW nested breakdown from below
         results = Results(energy, forces, components, force_components)
         return results
 

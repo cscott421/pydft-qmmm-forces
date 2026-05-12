@@ -8,7 +8,7 @@
 
 </p>
 
-PyDFT-QMMM: A Modular Framework for DFT-QM/MM Simulation
+PyDFT-QMMM: A Modular Framework for DFT-QM/MM Simulation added force DCD files
 ========================================================
 
 <p align="center">
@@ -30,6 +30,33 @@ PyDFT-QMMM implements QM/MM dynamics for several different PBC QM/MM
 approaches, including the QM/MM/Cutoff and
 [QM/MM/PME](https://doi.org/10.1063/5.0087386) methods.  Visit our
 [website](https://johnppederson.com/pydft-qmmm/) for full documentation.
+
+Edits to OG code:
+------------
+**calculators/calculator.py**
+  -Added ForceComponents type alias
+  -Added force_components: ForceComponents field to Results dataclass
+
+**calculators/composite_calculator.py**
+  -Imported ForceComponents
+  -Initialized force_components: ForceComponents = dict() in calculate()
+  -Populated it with results.forces and results.force_components per sub-calculator inside if return_forces
+
+**calculators/potential_calculator.py**
+  -No changes needed — empty force_components default from Results is correct
+
+**utils/logging.py**
+  -Added ForceRecord class
+  -Added PyDFTQMMMForceFilter class
+  -Added ForceDCDHandler class
+  -Added make_force_dcd_handler function
+  -Added force_dcd_write and force_dcd_write_interval parameters to Loggable.__init__
+  -Added force handler creation block in Loggable.__init__
+
+**wrappers/simulation.py**
+  -Stored results.force_components on self
+  -Added loop to emit ForceRecord logs per force component in calculate_energy_forces()
+
 
 Requirements
 ------------

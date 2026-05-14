@@ -161,6 +161,9 @@ class PyDFTQMMMPositionFilter(PyDFTQMMMIntervalFilter):
 class PyDFTQMMMForceFilter(PyDFTQMMMIntervalFilter):
     """ Logging filter that grabs logs with force data.
     """
+    def __init__(self, interval: int, key: str) -> None:
+        super().__init__(interval)
+        self.key = key
     def filter(self, record: logging.LogRecord) -> bool:
         """Determine whether or not to log the record.
 
@@ -176,9 +179,9 @@ class PyDFTQMMMForceFilter(PyDFTQMMMIntervalFilter):
             return False
         if not hasattr(record, "forces"):
             return False
-        if check_array(record.forces):
-            raise TypeError
-        return True
+        if not hasattr(record, "force_key"):
+            return False
+        return record.force_key == self.key        # only matching key passes
 
 
 class PyDFTQMMMCSVFormatter(logging.Formatter):
@@ -571,7 +574,7 @@ def make_force_dcd_handler(
     """
     outfile = pathlib.Path(output_directory) / f"forces_{key}.dcd"
     handler = ForceDCDHandler(outfile, interval, timestep)
-    handler.addFilter(PyDFTQMMMForceFilter(interval))
+    handler.addFilter(PyDFTQMMMForceFilter(interval, key))
     return handler
 
 

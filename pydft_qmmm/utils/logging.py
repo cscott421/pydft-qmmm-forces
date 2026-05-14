@@ -528,7 +528,7 @@ class ForceDCDHandler(logging.Handler):
             self.stream.seek(20, os.SEEK_SET)
             self.stream.write(struct.pack("<i", frame))
             self.stream.seek(0, os.SEEK_END)
-            size = struct.pack("<i", 4*system_size)
+            size = struct.pack("<i", 8*system_size)
             for i in range(3):
                 self.stream.write(size)
                 coordinate = array.array("d", (r[i] for r in forces))

@@ -640,7 +640,7 @@ class Loggable:
             )
             handlers.append(dcd_handler)
         if force_dcd_write:
-            for key in ["qm", "mm"]:
+            for key in ["Psi4", "OpenMM"]:
                 force_dcd_handler= make_force_dcd_handler(
                     output_directory,
                     key,

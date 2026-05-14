@@ -123,7 +123,14 @@ class Simulation(Loggable):
         temp = self.system.positions.base.copy()
         results = self.calculator.calculate()
         self.system.forces = results.forces
-        self.force_components = results.force_components  # store for access
+        self.force_components = results.force_components # store for access
+        for key, forces in self.force_components.items():
+            if isinstance(forces, np.ndarray):
+                logger.info("", extra={
+                    "frame": self._frame, 
+                    "forces": forces,
+                    "force_key": key,  # add this
+                })
         kinetic_energy = self.integrator.compute_kinetic_energy(
             self.system,
         )

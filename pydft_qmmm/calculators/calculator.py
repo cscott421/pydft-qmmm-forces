@@ -9,6 +9,7 @@ __all__ = [
     "Calculator",
     "CalculatorPlugin",
     "Components",
+    "ForceComponents",
     "Results",
 ]
 
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 Components: TypeAlias = dict[str, Any]
 
 #NEW line for forces
-ForceComponents: TypeAlias = dict[str, NDArray[np.float64]]
+ForceComponents: TypeAlias = dict[str, Any]
 
 @dataclass
 class Results:

@@ -276,14 +276,14 @@ class PyDFTQMMMLogFormatter(logging.Formatter):
 
 
 class DCDHandler(logging.Handler):
-    r"""Handler for writing position data to a DCD file.
+    r"""Handler for writing position or force data to a DCD file.
 
     Args:
         filename: The path of the DCD file.
-        interval: The interval between subsequent writes in terms
-            of simulation steps.
-        timestep: The timestep (:math:`\mathrm{fs}`) of the simulation.
-        mode: The mode in which to access the DCD file.
+        interval: The interval between subsequent writes.
+        timestep: The timestep (fs) of the simulation.
+        mode: Either "positions" or "forces".
+        file_mode: The mode in which to open the file.
     """
 
     def __init__(
@@ -291,10 +291,12 @@ class DCDHandler(logging.Handler):
             filename: str | bytes | os.PathLike,
             interval: int,
             timestep: int | float,
+            mode: str = "positions",
             mode: str = "w+b",
     ) -> None:
         self.interval = interval
         self.timestep = timestep
+        self.mode = mode
         super().__init__()
         self.stream = open(filename, mode)
 
@@ -326,29 +328,42 @@ class DCDHandler(logging.Handler):
         Args:
             record: The record to write to a DCD file.
         """
-        record = cast(PositionRecord, record)
         try:
             self.acquire()
             if self.stream.closed:
                 self.stream = open(self.stream.name, self.stream.mode)
-            positions, box, frame = record.positions, record.box, record.frame
-            a, b, c, A, B, G = lattice.compute_lattice_constants(box)
-            system_size = len(positions)
+
+            frame = record.frame
+
+            if self.mode == "positions":
+                record = cast(PositionRecord, record)
+                data = record.positions
+                a, b, c, A, B, G = lattice.compute_lattice_constants(record.box)
+                dtype, size_mult = "f", 4
+            else:
+                record = cast(ForceRecord, record)
+                data = record.forces
+                dtype, size_mult = "d", 8
+
+            system_size = len(data)
             if frame == 0:
-                header = self._build_header(system_size)
-                self.stream.write(header)
+                self.stream.write(self._build_header(system_size))
+
             self.stream.seek(8, os.SEEK_SET)
-            self.stream.write(struct.pack("<i", frame//self.interval))
+            self.stream.write(struct.pack("<i", frame // self.interval))
             self.stream.seek(20, os.SEEK_SET)
             self.stream.write(struct.pack("<i", frame))
             self.stream.seek(0, os.SEEK_END)
-            self.stream.write(struct.pack("<i6di", 48, a, G, b, B, A, c, 48))
-            size = struct.pack("<i", 4*system_size)
+
+            if self.mode == "positions":
+                self.stream.write(struct.pack("<i6di", 48, a, G, b, B, A, c, 48))
+
+            size = struct.pack("<i", size_mult * system_size)
             for i in range(3):
                 self.stream.write(size)
-                coordinate = array.array("f", (r[i] for r in positions))
-                coordinate.tofile(self.stream)
+                array.array(dtype, (r[i] for r in data)).tofile(self.stream)
                 self.stream.write(size)
+
             self.stream.flush()
         except Exception:
             self.handleError(record)
@@ -365,7 +380,6 @@ class DCDHandler(logging.Handler):
                 super().close()
         finally:
             self.release()
-
 
 def make_file_handler(
         output_directory: str,
@@ -460,100 +474,9 @@ def make_dcd_handler(
         A DCD file handler.
     """
     outfile = pathlib.Path(output_directory) / "pydft_qmmm.dcd"
-    handler = DCDHandler(outfile, interval, timestep)
+    handler = DCDHandler(outfile, interval, timestep, mode="positions")
     handler.addFilter(PyDFTQMMMPositionFilter(interval))
     return handler
-
-
-class ForceDCDHandler(logging.Handler):
-    r"""Handler for writing Force data to a DCD file.
-
-    Args:
-        filename: The path of the DCD file.
-        interval: The interval between subsequent writes in terms
-            of simulation steps.
-        timestep: The timestep (:math:`\mathrm{fs}`) of the simulation.
-        mode: The mode in which to access the DCD file.
-    """
-
-    def __init__(
-            self,
-            filename: str | bytes | os.PathLike,
-            interval: int,
-            timestep: int | float,
-            mode: str = "w+b",
-    ) -> None:
-        self.interval = interval
-        self.timestep = timestep
-        super().__init__()
-        self.stream = open(filename, mode)
-
-    def _build_header(self, system_size: int) -> bytes:
-        """Generate the header to the DCD file.
-
-        Args:
-            system_size: The number of particles in the system.
-
-        Returns:
-            The header of the DCD file in binary format.
-        """
-        header = struct.pack(
-            "<i4c9if", 84, b"C", b"O", b"R", b"D",
-            0, 0, self.interval, 0, 0, 0, 0, 0, 0, self.timestep,
-        )
-        header += struct.pack(
-            "<13i", 1, 0, 0, 0, 0, 0, 0, 0, 0, 24,
-            84, 164, 2,
-        )
-        header += struct.pack("<80s", b"Created by PyDFT-QMMM")
-        header += struct.pack("<80s", b"Created now")
-        header += struct.pack("<4i", 164, 4, system_size, 4)
-        return header
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """Write a record to a DCD file.
-
-        Args:
-            record: The record to write to a DCD file.
-        """
-        record = cast(ForceRecord, record)
-        try:
-            self.acquire()
-            if self.stream.closed:
-                self.stream = open(self.stream.name, self.stream.mode)
-            forces, frame = record.forces, record.frame
-            system_size = len(forces)
-            if frame == 0:
-                header = self._build_header(system_size)
-                self.stream.write(header)
-            self.stream.seek(8, os.SEEK_SET)
-            self.stream.write(struct.pack("<i", frame//self.interval))
-            self.stream.seek(20, os.SEEK_SET)
-            self.stream.write(struct.pack("<i", frame))
-            self.stream.seek(0, os.SEEK_END)
-            size = struct.pack("<i", 8*system_size)
-            for i in range(3):
-                self.stream.write(size)
-                coordinate = array.array("d", (r[i] for r in forces))
-                coordinate.tofile(self.stream)
-                self.stream.write(size)
-            self.stream.flush()
-        except Exception:
-            self.handleError(record)
-        finally:
-            self.release()
-
-    def close(self) -> None:
-        """Close the DCD file stream."""
-        try:
-            self.acquire()
-            try:
-                self.stream.close()
-            finally:
-                super().close()
-        finally:
-            self.release()
-
 
 def make_force_dcd_handler(
         output_directory: str,
@@ -573,7 +496,7 @@ def make_force_dcd_handler(
         A DCD file handler.
     """
     outfile = pathlib.Path(output_directory) / f"forces_{key}.dcd"
-    handler = ForceDCDHandler(outfile, interval, timestep)
+    handler = DCDHandler(outfile, interval, timestep, mode="forces")
     handler.addFilter(PyDFTQMMMForceFilter(interval, key))
     return handler
 

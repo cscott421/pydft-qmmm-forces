@@ -292,13 +292,13 @@ class DCDHandler(logging.Handler):
             interval: int,
             timestep: int | float,
             mode: str = "positions",
-            mode: str = "w+b",
+            file_mode: str = "w+b",
     ) -> None:
         self.interval = interval
         self.timestep = timestep
         self.mode = mode
         super().__init__()
-        self.stream = open(filename, mode)
+        self.stream = open(filename, file_mode)
 
     def _build_header(self, system_size: int) -> bytes:
         """Generate the header to the DCD file.

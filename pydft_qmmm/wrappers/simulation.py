@@ -145,9 +145,6 @@ class Simulation(Loggable):
         self.energy = energy
         self._offset += temp - self.system.positions.base
         logger.info("", extra={"frame": self._frame, "energy": self.energy})
-        for key, forces in self.force_components.items():
-            if isinstance(forces, np.ndarray):  # skip nested dicts
-                logger.info("", extra={"frame": self._frame, "forces": forces})
 
     def _register_plugins(self, plugins: list[Plugin]) -> None:
         """Dynamically load plugins for calculators and integrators.
